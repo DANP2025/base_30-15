@@ -1,146 +1,93 @@
-# ===============================================
-# Streamlit App: Zscore y Tscore - Hoja FUERZA
-# Autor: Daniel (DANP2025)
-# ===============================================
-
 import streamlit as st
 import pandas as pd
-import numpy as np
 import os
-import plotly.express as px
 
-# ------------------------------------------------
-# CONFIGURACIÓN GENERAL DE LA PÁGINA
-# ------------------------------------------------
-st.set_page_config(
-    page_title="Zscore / Tscore - RM Sentadilla",
-    page_icon="💪",
-    layout="wide"
-)
+# -------------------------------------------------------------
+# CONFIGURACIÓN GENERAL
+# -------------------------------------------------------------
+st.set_page_config(page_title="Análisis Zscore - Streamlit", layout="wide")
 
-st.title("💪 Zscore y Tscore — Hoja: FUERZA")
-st.markdown("### Resumen por JUGADOR (RM SENTADILLA)")
+# -------------------------------------------------------------
+# FUNCIÓN PARA CARGAR EL EXCEL
+# -------------------------------------------------------------
+@st.cache_data
+def cargar_datos():
+    try:
+        # Buscar el archivo Excel en la misma carpeta
+        archivos = [f for f in os.listdir('.') if f.endswith('.xlsx')]
+        if not archivos:
+            st.error("⚠️ No se encontró ningún archivo Excel (.xlsx) en la carpeta del proyecto.")
+            return None
+        archivo_excel = archivos[0]
+        df = pd.read_excel(archivo_excel)
+        st.success(f"✅ Archivo cargado correctamente: {archivo_excel}")
+        return df
+    except Exception as e:
+        st.error(f"Error al cargar el archivo Excel: {e}")
+        return None
 
-# ------------------------------------------------
-# LECTURA DEL EXCEL (Ruta relativa)
-# ------------------------------------------------
-excel_path = os.path.join(os.path.dirname(__file__), "BASE DE DATOS TODAS LAS VARIABLES DEMO.xlsx")
+# -------------------------------------------------------------
+# FUNCIÓN PARA APLICAR EMOJIS SEGÚN UMBRALES
+# -------------------------------------------------------------
+def aplicar_emojis(df):
+    df_emojis = df.copy()
+    for col in df_emojis.select_dtypes(include=['int', 'float']).columns:
+        df_emojis[col] = df_emojis[col].apply(lambda x: "🟢👍" if x >= 0.5 else ("🟡⚠️" if x >= 0 else "🔴👎"))
+    return df_emojis
 
-try:
-    df = pd.read_excel(excel_path, sheet_name="FUERZA")
-except FileNotFoundError:
-    st.error(f"No se encontró el archivo Excel en la ruta:\n\n{excel_path}")
-    st.stop()
+# -------------------------------------------------------------
+# CARGAR DATOS
+# -------------------------------------------------------------
+df = cargar_datos()
+if df is not None:
+    st.subheader("📊 Vista previa de los datos originales")
+    st.dataframe(df.head())
 
-# ------------------------------------------------
-# LIMPIEZA Y PREPARACIÓN DE DATOS
-# ------------------------------------------------
-# Aseguramos que las columnas necesarias existan
-required_columns = ["JUGADOR", "CATEGORIA", "MES", "RM SENTADILLA"]
-for col in required_columns:
-    if col not in df.columns:
-        st.error(f"Falta la columna '{col}' en la hoja FUERZA del Excel.")
-        st.stop()
+    # -------------------------------------------------------------
+    # APLICAR EMOJIS
+    # -------------------------------------------------------------
+    df_emojis = aplicar_emojis(df)
 
-# Eliminamos filas con valores vacíos en RM SENTADILLA
-df = df.dropna(subset=["RM SENTADILLA"])
+    # -------------------------------------------------------------
+    # CREAR FILTROS DINÁMICOS CON SELECCIÓN MÚLTIPLE
+    # -------------------------------------------------------------
+    st.sidebar.header("🎚️ Filtros dinámicos")
 
-# ------------------------------------------------
-# FILTROS DINÁMICOS E INTERACTIVOS
-# ------------------------------------------------
-col1, col2, col3 = st.columns(3)
+    filtros = {}
+    columnas_filtro = df.select_dtypes(include=['object', 'category']).columns
 
-with col1:
-    filtro_mes = st.selectbox("📅 MES", options=["Todos"] + sorted(df["MES"].dropna().unique().tolist()))
+    for col in columnas_filtro:
+        opciones = sorted(df[col].dropna().unique().tolist())
+        seleccion = st.sidebar.multiselect(
+            f"Filtrar por {col}",
+            options=["Todos"] + opciones,
+            default=["Todos"]
+        )
+        filtros[col] = seleccion
 
-with col2:
-    filtro_jugador = st.selectbox("⚽ JUGADOR", options=["Todos"] + sorted(df["JUGADOR"].dropna().unique().tolist()))
+    # -------------------------------------------------------------
+    # APLICAR LOS FILTROS
+    # -------------------------------------------------------------
+    df_filtrado = df_emojis.copy()
+    for col, seleccion in filtros.items():
+        if "Todos" not in seleccion:
+            df_filtrado = df_filtrado[df_filtrado[col].isin(seleccion)]
 
-with col3:
-    filtro_categoria = st.selectbox("🏆 CATEGORIA", options=["Todos"] + sorted(df["CATEGORIA"].dropna().unique().tolist()))
+    # -------------------------------------------------------------
+    # MOSTRAR RESULTADOS
+    # -------------------------------------------------------------
+    st.subheader("📋 Datos filtrados con emojis")
+    st.dataframe(df_filtrado, use_container_width=True)
 
-# Aplicar filtros
-df_filtrado = df.copy()
-if filtro_mes != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["MES"] == filtro_mes]
-if filtro_jugador != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["JUGADOR"] == filtro_jugador]
-if filtro_categoria != "Todos":
-    df_filtrado = df_filtrado[df_filtrado["CATEGORIA"] == filtro_categoria]
-
-# ------------------------------------------------
-# CÁLCULO DE ZSCORE Y TSCORE
-# ------------------------------------------------
-if df_filtrado.empty:
-    st.warning("⚠️ No hay datos que coincidan con los filtros seleccionados.")
-    st.stop()
-
-media = df_filtrado["RM SENTADILLA"].mean()
-desviacion = df_filtrado["RM SENTADILLA"].std()
-
-df_filtrado["ZSCORE"] = (df_filtrado["RM SENTADILLA"] - media) / desviacion
-df_filtrado["TSCORE"] = df_filtrado["ZSCORE"] * 10 + 50
-
-# ------------------------------------------------
-# MOSTRAR TABLA RESUMEN
-# ------------------------------------------------
-st.dataframe(
-    df_filtrado[["JUGADOR", "RM SENTADILLA", "ZSCORE", "TSCORE"]],
-    use_container_width=True,
-    hide_index=True
-)
-
-# ------------------------------------------------
-# GRÁFICOS DINÁMICOS (Zscore y Tscore)
-# ------------------------------------------------
-st.markdown("## 📊 Gráficos — se actualizan con los filtros")
-
-col_g1, col_g2 = st.columns(2)
-
-# Gráfico Zscore
-with col_g1:
-    fig_z = px.bar(
-        df_filtrado,
-        x="JUGADOR",
-        y="ZSCORE",
-        title="Zscore por Jugador",
-        color="ZSCORE",
-        color_continuous_scale="Viridis",
-        text_auto=".2f"
+    # -------------------------------------------------------------
+    # DESCARGA DEL RESULTADO
+    # -------------------------------------------------------------
+    st.download_button(
+        label="⬇️ Descargar tabla filtrada en Excel",
+        data=df_filtrado.to_csv(index=False).encode('utf-8'),
+        file_name="tabla_filtrada.csv",
+        mime="text/csv"
     )
-    fig_z.update_layout(
-        xaxis_title="Jugador",
-        yaxis_title="Zscore",
-        title_x=0.5,
-        title_font=dict(size=18),
-        margin=dict(l=20, r=20, t=50, b=20),
-        height=400
-    )
-    st.plotly_chart(fig_z, use_container_width=True)
 
-# Gráfico Tscore
-with col_g2:
-    fig_t = px.bar(
-        df_filtrado,
-        x="JUGADOR",
-        y="TSCORE",
-        title="Tscore por Jugador",
-        color="TSCORE",
-        color_continuous_scale="Cividis",
-        text_auto=".2f"
-    )
-    fig_t.update_layout(
-        xaxis_title="Jugador",
-        yaxis_title="Tscore",
-        title_x=0.5,
-        title_font=dict(size=18),
-        margin=dict(l=20, r=20, t=50, b=20),
-        height=400
-    )
-    st.plotly_chart(fig_t, use_container_width=True)
-
-# ------------------------------------------------
-# NOTA FINAL
-# ------------------------------------------------
-st.markdown("---")
-st.caption("✅ Los gráficos y la tabla se actualizan automáticamente al cambiar los filtros o al actualizar el archivo Excel.")
+else:
+    st.warning("Subí o colocá el archivo Excel en la misma carpeta que este script antes de continuar.")
