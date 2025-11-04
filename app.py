@@ -1,143 +1,146 @@
-# app.py
-import os
+# ===============================================
+# Streamlit App: Zscore y Tscore - Hoja FUERZA
+# Autor: Daniel (DANP2025)
+# ===============================================
+
+import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy.stats import zscore
+import os
 import plotly.express as px
-import streamlit as st
 
-st.set_page_config(page_title="Zscore / Tscore - RM Sentadilla", layout="wide")
+# ------------------------------------------------
+# CONFIGURACIÓN GENERAL DE LA PÁGINA
+# ------------------------------------------------
+st.set_page_config(
+    page_title="Zscore / Tscore - RM Sentadilla",
+    page_icon="💪",
+    layout="wide"
+)
 
-DATA_PATH = r"C:\Users\Daniel\Desktop\base_30-15\BASE DE DATOS TODAS LAS VARIABLES DEMO.xlsx"
-SHEET_NAME = "FUERZA"
-RM_COL_NAME = "RM SENTADILLA"   # columna con valores que usaremos
-PLAYER_COL = "JUGADOR"
-MES_COL = "MES"
-CAT_COL = "CATEGORIA"
+st.title("💪 Zscore y Tscore — Hoja: FUERZA")
+st.markdown("### Resumen por JUGADOR (RM SENTADILLA)")
 
-# --- Helper: carga el excel y fuerza nombres de columnas limpias
-@st.cache_data(show_spinner=False)
-def load_raw_data(path, mtime):
-    # mtime se pasa para invalidar cache cuando el archivo cambia
-    try:
-        df = pd.read_excel(path, sheet_name=SHEET_NAME, engine="openpyxl")
-    except Exception as e:
-        st.error(f"No se pudo leer la hoja '{SHEET_NAME}' del archivo.\nError: {e}")
-        return pd.DataFrame()
-    # Normalize column names (quita espacios al inicio/final)
-    df.columns = [str(c).strip().upper() for c in df.columns]
-    return df
+# ------------------------------------------------
+# LECTURA DEL EXCEL (Ruta relativa)
+# ------------------------------------------------
+excel_path = os.path.join(os.path.dirname(__file__), "BASE DE DATOS TODAS LAS VARIABLES DEMO.xlsx")
 
-# --- Lectura dependiente del tiempo de modificación del archivo (recarga automática)
-def get_data():
-    if not os.path.exists(DATA_PATH):
-        st.error(f"No se encuentra el archivo en: {DATA_PATH}")
-        return pd.DataFrame()
-    mtime = os.path.getmtime(DATA_PATH)
-    df = load_raw_data(DATA_PATH, mtime)
-    return df
-
-df_raw = get_data()
-if df_raw.empty:
+try:
+    df = pd.read_excel(excel_path, sheet_name="FUERZA")
+except FileNotFoundError:
+    st.error(f"No se encontró el archivo Excel en la ruta:\n\n{excel_path}")
     st.stop()
 
-# Asegurar nombres esperados (mayúsculas)
-RM = RM_COL_NAME.strip().upper()
-PLAYER = PLAYER_COL.strip().upper()
-MES = MES_COL.strip().upper()
-CAT = CAT_COL.strip().upper()
+# ------------------------------------------------
+# LIMPIEZA Y PREPARACIÓN DE DATOS
+# ------------------------------------------------
+# Aseguramos que las columnas necesarias existan
+required_columns = ["JUGADOR", "CATEGORIA", "MES", "RM SENTADILLA"]
+for col in required_columns:
+    if col not in df.columns:
+        st.error(f"Falta la columna '{col}' en la hoja FUERZA del Excel.")
+        st.stop()
 
-# Comprueba existencia de columnas
-missing = [c for c in (RM, PLAYER, MES, CAT) if c not in df_raw.columns]
-if missing:
-    st.error(f"Faltan las siguientes columnas en la hoja '{SHEET_NAME}': {missing}")
-    st.stop()
+# Eliminamos filas con valores vacíos en RM SENTADILLA
+df = df.dropna(subset=["RM SENTADILLA"])
 
-# --- Interfaz de filtros (un solo widget por columna, con opción 'Todos')
-st.title("Zscore y Tscore de RM SENTADILLA — Hoja: FUERZA")
-
-with st.sidebar:
-    st.header("Filtros (1 por columna)")
-    meses = ["Todos"] + sorted(df_raw[MES].dropna().astype(str).unique().tolist())
-    jugador_opts = ["Todos"] + sorted(df_raw[PLAYER].dropna().astype(str).unique().tolist())
-    categorias = ["Todos"] + sorted(df_raw[CAT].dropna().astype(str).unique().tolist())
-
-    sel_mes = st.selectbox("MES", meses, index=0)
-    sel_jugador = st.selectbox("JUGADOR", jugador_opts, index=0)
-    sel_categoria = st.selectbox("CATEGORIA", categorias, index=0)
-
-# --- Aplicar filtros
-df = df_raw.copy()
-if sel_mes != "Todos":
-    df = df[df[MES].astype(str) == sel_mes]
-if sel_jugador != "Todos":
-    df = df[df[PLAYER].astype(str) == sel_jugador]
-if sel_categoria != "Todos":
-    df = df[df[CAT].astype(str) == sel_categoria]
-
-if df.empty:
-    st.warning("No hay datos con los filtros seleccionados.")
-    st.stop()
-
-# --- Agrupar por jugador (si existen múltiples filas por jugador en los filtros)
-# Tomamos la media de RM SENTADILLA por jugador dentro del filtro actual.
-agg = df.groupby(PLAYER, as_index=False)[RM].mean().rename(columns={RM: "RM_MEAN"})
-
-# --- Calculo zscore y tscore (zscore entre jugadores del conjunto filtrado)
-# Si std = 0 (todos iguales) damos zscore 0
-if agg["RM_MEAN"].std(ddof=0) == 0:
-    agg["ZSCORE"] = 0.0
-else:
-    agg["ZSCORE"] = zscore(agg["RM_MEAN"].astype(float), nan_policy='omit')
-
-agg["TSCORE"] = 50 + 10 * agg["ZSCORE"]
-
-# Ordenar por valor para visual más limpio
-agg = agg.sort_values("RM_MEAN", ascending=False)
-
-# --- Mostrar tabla resumida
-st.subheader("Resumen por JUGADOR (RM promedio dentro del filtro)")
-st.dataframe(agg.reset_index(drop=True))
-
-# --- Graficos (uno para zscore y otro para tscore)
-st.subheader("Gráficos — se actualizan con los filtros")
-col1, col2 = st.columns(2)
+# ------------------------------------------------
+# FILTROS DINÁMICOS E INTERACTIVOS
+# ------------------------------------------------
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.markdown("**Zscore (barras)**")
-    fig_z = px.bar(
-        agg,
-        x=PLAYER,
-        y="ZSCORE",
-        hover_data=["RM_MEAN", "TSCORE"],
-        labels={"ZSCORE": "Zscore", PLAYER: "Jugador", "RM_MEAN": "RM promedio"},
-        title="Zscore por Jugador (RM SENTADILLA)",
-    )
-    fig_z.update_layout(xaxis_tickangle=-45, margin=dict(l=10, r=10, t=50, b=150))
-    st.plotly_chart(fig_z, use_container_width=True)
+    filtro_mes = st.selectbox("📅 MES", options=["Todos"] + sorted(df["MES"].dropna().unique().tolist()))
 
 with col2:
-    st.markdown("**Tscore (barras)**")
-    fig_t = px.bar(
-        agg,
-        x=PLAYER,
-        y="TSCORE",
-        hover_data=["RM_MEAN", "ZSCORE"],
-        labels={"TSCORE": "Tscore", PLAYER: "Jugador"},
-        title="Tscore por Jugador (RM SENTADILLA)",
+    filtro_jugador = st.selectbox("⚽ JUGADOR", options=["Todos"] + sorted(df["JUGADOR"].dropna().unique().tolist()))
+
+with col3:
+    filtro_categoria = st.selectbox("🏆 CATEGORIA", options=["Todos"] + sorted(df["CATEGORIA"].dropna().unique().tolist()))
+
+# Aplicar filtros
+df_filtrado = df.copy()
+if filtro_mes != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["MES"] == filtro_mes]
+if filtro_jugador != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["JUGADOR"] == filtro_jugador]
+if filtro_categoria != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["CATEGORIA"] == filtro_categoria]
+
+# ------------------------------------------------
+# CÁLCULO DE ZSCORE Y TSCORE
+# ------------------------------------------------
+if df_filtrado.empty:
+    st.warning("⚠️ No hay datos que coincidan con los filtros seleccionados.")
+    st.stop()
+
+media = df_filtrado["RM SENTADILLA"].mean()
+desviacion = df_filtrado["RM SENTADILLA"].std()
+
+df_filtrado["ZSCORE"] = (df_filtrado["RM SENTADILLA"] - media) / desviacion
+df_filtrado["TSCORE"] = df_filtrado["ZSCORE"] * 10 + 50
+
+# ------------------------------------------------
+# MOSTRAR TABLA RESUMEN
+# ------------------------------------------------
+st.dataframe(
+    df_filtrado[["JUGADOR", "RM SENTADILLA", "ZSCORE", "TSCORE"]],
+    use_container_width=True,
+    hide_index=True
+)
+
+# ------------------------------------------------
+# GRÁFICOS DINÁMICOS (Zscore y Tscore)
+# ------------------------------------------------
+st.markdown("## 📊 Gráficos — se actualizan con los filtros")
+
+col_g1, col_g2 = st.columns(2)
+
+# Gráfico Zscore
+with col_g1:
+    fig_z = px.bar(
+        df_filtrado,
+        x="JUGADOR",
+        y="ZSCORE",
+        title="Zscore por Jugador",
+        color="ZSCORE",
+        color_continuous_scale="Viridis",
+        text_auto=".2f"
     )
-    fig_t.update_layout(xaxis_tickangle=-45, margin=dict(l=10, r=10, t=50, b=150))
+    fig_z.update_layout(
+        xaxis_title="Jugador",
+        yaxis_title="Zscore",
+        title_x=0.5,
+        title_font=dict(size=18),
+        margin=dict(l=20, r=20, t=50, b=20),
+        height=400
+    )
+    st.plotly_chart(fig_z, use_container_width=True)
+
+# Gráfico Tscore
+with col_g2:
+    fig_t = px.bar(
+        df_filtrado,
+        x="JUGADOR",
+        y="TSCORE",
+        title="Tscore por Jugador",
+        color="TSCORE",
+        color_continuous_scale="Cividis",
+        text_auto=".2f"
+    )
+    fig_t.update_layout(
+        xaxis_title="Jugador",
+        yaxis_title="Tscore",
+        title_x=0.5,
+        title_font=dict(size=18),
+        margin=dict(l=20, r=20, t=50, b=20),
+        height=400
+    )
     st.plotly_chart(fig_t, use_container_width=True)
 
-# --- Notas y explicación para el usuario dentro de la app
-with st.expander("¿Cómo se calcularon Zscore y Tscore?"):
-    st.markdown("""
-    - Se agruparon los registros visibles por **JUGADOR** y se tomó el **promedio de RM SENTADILLA** por jugador dentro de los filtros seleccionados.
-    - **Zscore** = (valor del jugador - media de todos los jugadores filtrados) / desviación estándar.
-    - **Tscore** = 50 + 10 * Zscore (fórmula clásica).
-    - Si todos los valores son iguales, Zscore se considera 0 para evitar división por cero.
-    - Cada vez que actualices el archivo Excel (mismo nombre y misma ruta), la app detecta la modificación y recarga los datos automáticamente.
-    """)
-
+# ------------------------------------------------
+# NOTA FINAL
+# ------------------------------------------------
 st.markdown("---")
-st.caption("App desarrollada para lectura local de un Excel. Para publicar en Streamlit Cloud sigue la guía paso a paso.")
+st.caption("✅ Los gráficos y la tabla se actualizan automáticamente al cambiar los filtros o al actualizar el archivo Excel.")
