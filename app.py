@@ -14,9 +14,10 @@ hide_streamlit_style = """
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    [data-testid="stActionButton"] {display: none;}
     [data-testid="stToolbar"] {display: none;}
-    [data-testid="stAppViewContainer"] > div:first-child {padding-top: 0rem;}
+    [data-testid="stActionButton"] {display: none;}
+    [data-testid="stDecoration"] {display: none;}
+    [data-testid="stStatusWidget"] {display: none;}
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
@@ -35,35 +36,6 @@ def cargar_datos():
     return df
 
 df = cargar_datos()
-
-# -------------------------------
-# MOSTRAR IMAGEN COMO REFERENCIA DE CLASIFICACIÓN
-# -------------------------------
-st.markdown("""
-<style>
-.banner-container {
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-.banner-container img {
-    width: 85%;
-    border-radius: 15px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-}
-.banner-caption {
-    text-align: center;
-    color: #666;
-    font-size: 14px;
-    margin-top: 0.3rem;
-    font-style: italic;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="banner-container">', unsafe_allow_html=True)
-st.image(imagen_header, use_container_width=False)
-st.markdown('<div class="banner-caption">Referencia de clasificación de fuerza</div>', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------------------
 # FILTROS DINÁMICOS
@@ -106,62 +78,89 @@ df_filtrado["ZScore"] = (df_filtrado["RM SENTADILLA"] - mean_val) / std_val
 df_filtrado["TScore"] = (df_filtrado["ZScore"] * 10) + 50
 
 # -------------------------------
-# GRÁFICOS PROFESIONALES
+# SECCIÓN PRINCIPAL CON IMAGEN Y GRÁFICOS
 # -------------------------------
 st.markdown("## 💪 Análisis de Fuerza por Jugador")
 
-col1, col2 = st.columns(2)
+# Layout: Imagen a la izquierda + Gráficos a la derecha
+col_img, col_grafs = st.columns([1, 2], gap="large")
 
-# ---------- GRÁFICO ZSCORE ----------
-with col1:
-    fig, ax = plt.subplots(figsize=(7, 5))
-    colores = plt.cm.viridis(np.linspace(0.2, 0.9, len(df_filtrado)))
+# ---------- IMAGEN DE REFERENCIA ----------
+with col_img:
+    st.markdown("""
+        <style>
+        .ref-img {
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            border-radius: 15px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.25);
+            max-width: 100%;
+        }
+        .ref-caption {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    st.image(imagen_header, use_container_width=True, caption=None, output_format="PNG")
+    st.markdown('<div class="ref-caption">Referencia visual de clasificación</div>', unsafe_allow_html=True)
 
-    bars = ax.bar(df_filtrado["JUGADOR"], df_filtrado["ZScore"],
-                  color=colores, alpha=0.9, edgecolor="black", linewidth=1.2)
+# ---------- GRÁFICOS ----------
+with col_grafs:
+    c1, c2 = st.columns(2)
 
-    # Etiquetas sobre cada barra
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2, height,
-                f"{height:.2f}", ha="center", va="bottom", fontsize=10, color="black", fontweight='bold')
+    # ----- GRÁFICO ZSCORE -----
+    with c1:
+        fig, ax = plt.subplots(figsize=(6, 4.5))
+        colores = plt.cm.viridis(np.linspace(0.2, 0.9, len(df_filtrado)))
 
-    ax.set_title("📊 Z-SCORE por Jugador", fontsize=15, fontweight='bold')
-    ax.set_xlabel("")
-    ax.set_ylabel("ZScore", fontsize=12)
-    # Eliminar líneas y bordes
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.yaxis.grid(False)
-    ax.xaxis.grid(False)
-    plt.xticks(rotation=45, ha="right", fontsize=10)
-    st.pyplot(fig)
+        bars = ax.bar(df_filtrado["JUGADOR"], df_filtrado["ZScore"],
+                      color=colores, alpha=0.9, edgecolor="black", linewidth=1.2)
 
-# ---------- GRÁFICO TSCORE ----------
-with col2:
-    fig2, ax2 = plt.subplots(figsize=(7, 5))
-    colores2 = plt.cm.coolwarm(np.linspace(0.2, 0.9, len(df_filtrado)))
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, height,
+                    f"{height:.2f}", ha="center", va="bottom", fontsize=10, color="black", fontweight='bold')
 
-    bars2 = ax2.bar(df_filtrado["JUGADOR"], df_filtrado["TScore"],
-                    color=colores2, alpha=0.9, edgecolor="black", linewidth=1.2)
+        ax.set_title("📊 Z-SCORE", fontsize=15, fontweight='bold')
+        ax.set_xlabel("")
+        ax.set_ylabel("ZScore", fontsize=12)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.yaxis.grid(False)
+        ax.xaxis.grid(False)
+        plt.xticks(rotation=45, ha="right", fontsize=10)
+        st.pyplot(fig)
 
-    for bar in bars2:
-        height = bar.get_height()
-        ax2.text(bar.get_x() + bar.get_width()/2, height,
-                 f"{height:.1f}", ha="center", va="bottom", fontsize=10, color="black", fontweight='bold')
+    # ----- GRÁFICO TSCORE -----
+    with c2:
+        fig2, ax2 = plt.subplots(figsize=(6, 4.5))
+        colores2 = plt.cm.coolwarm(np.linspace(0.2, 0.9, len(df_filtrado)))
 
-    ax2.set_title("🔥 T-SCORE por Jugador", fontsize=15, fontweight='bold')
-    ax2.set_xlabel("")
-    ax2.set_ylabel("TScore", fontsize=12)
-    for spine in ax2.spines.values():
-        spine.set_visible(False)
-    ax2.yaxis.grid(False)
-    ax2.xaxis.grid(False)
-    plt.xticks(rotation=45, ha="right", fontsize=10)
-    st.pyplot(fig2)
+        bars2 = ax2.bar(df_filtrado["JUGADOR"], df_filtrado["TScore"],
+                        color=colores2, alpha=0.9, edgecolor="black", linewidth=1.2)
+
+        for bar in bars2:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2, height,
+                     f"{height:.1f}", ha="center", va="bottom", fontsize=10, color="black", fontweight='bold')
+
+        ax2.set_title("🔥 T-SCORE", fontsize=15, fontweight='bold')
+        ax2.set_xlabel("")
+        ax2.set_ylabel("TScore", fontsize=12)
+        for spine in ax2.spines.values():
+            spine.set_visible(False)
+        ax2.yaxis.grid(False)
+        ax2.xaxis.grid(False)
+        plt.xticks(rotation=45, ha="right", fontsize=10)
+        st.pyplot(fig2)
 
 # -------------------------------
-# INFORMACIÓN FINAL
+# PIE DE PÁGINA
 # -------------------------------
 st.markdown("""
 <div style="text-align:center; margin-top:20px; font-size:14px; color:gray;">
@@ -169,4 +168,3 @@ Datos actualizados automáticamente desde Excel.<br>
 Los cálculos se basan en la media y desviación estándar del mes seleccionado.
 </div>
 """, unsafe_allow_html=True)
-
