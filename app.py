@@ -13,6 +13,7 @@ st.set_page_config(page_title="Análisis de Fuerza", layout="wide")
 # -------------------------------
 ruta_excel = "BASE DE DATOS TODAS LAS VARIABLES DEMO.xlsx"
 hoja = "FUERZA"
+imagen_header = "clasificacion.png"
 
 @st.cache_data
 def cargar_datos():
@@ -21,6 +22,11 @@ def cargar_datos():
     return df
 
 df = cargar_datos()
+
+# -------------------------------
+# MOSTRAR IMAGEN ENCABEZADO
+# -------------------------------
+st.image(imagen_header, use_container_width=True, caption="Clasificación de Fuerza", output_format="PNG")
 
 # -------------------------------
 # FILTROS DINÁMICOS
@@ -51,7 +57,7 @@ df_filtrado = df_filtrado[
 # -------------------------------
 # CÁLCULOS ZSCORE Y TSCORE
 # -------------------------------
-# Usamos todos los jugadores del mes (no solo los filtrados) para calcular
+# El cálculo usa todos los jugadores del mes (no solo los filtrados)
 if mes_sel == "Todos":
     df_base = df.copy()
 else:
@@ -64,7 +70,7 @@ df_filtrado["ZScore"] = (df_filtrado["RM SENTADILLA"] - mean_val) / std_val
 df_filtrado["TScore"] = (df_filtrado["ZScore"] * 10) + 50
 
 # -------------------------------
-# GRÁFICOS CON ESTILO "VENDE HUMO"
+# GRÁFICOS CON ESTILO “VENDE HUMO”
 # -------------------------------
 st.markdown("## 💪 Análisis de Fuerza por Jugador")
 
@@ -78,16 +84,22 @@ with col1:
     bars = ax.bar(df_filtrado["JUGADOR"], df_filtrado["ZScore"],
                   color=colores, alpha=0.9, edgecolor="black", linewidth=1)
 
-    # Etiquetas de valores
+    # Etiquetas sobre cada barra
     for bar in bars:
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2, height,
-                f"{height:.2f}", ha="center", va="bottom", fontsize=10, color="black")
+                f"{height:.2f}", ha="center", va="bottom", fontsize=10, color="black", fontweight='bold')
 
     ax.set_title("📊 Z-SCORE por Jugador", fontsize=15, fontweight='bold')
     ax.set_xlabel("")
     ax.set_ylabel("ZScore", fontsize=12)
-    ax.grid(alpha=0.3)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_axisbelow(True)
+    ax.yaxis.grid(False)
+    ax.xaxis.grid(False)
     plt.xticks(rotation=45, ha="right", fontsize=10)
     st.pyplot(fig)
 
@@ -102,12 +114,17 @@ with col2:
     for bar in bars2:
         height = bar.get_height()
         ax2.text(bar.get_x() + bar.get_width()/2, height,
-                 f"{height:.1f}", ha="center", va="bottom", fontsize=10, color="black")
+                 f"{height:.1f}", ha="center", va="bottom", fontsize=10, color="black", fontweight='bold')
 
     ax2.set_title("🔥 T-SCORE por Jugador", fontsize=15, fontweight='bold')
     ax2.set_xlabel("")
     ax2.set_ylabel("TScore", fontsize=12)
-    ax2.grid(alpha=0.3)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.spines['left'].set_visible(False)
+    ax2.spines['bottom'].set_visible(False)
+    ax2.yaxis.grid(False)
+    ax2.xaxis.grid(False)
     plt.xticks(rotation=45, ha="right", fontsize=10)
     st.pyplot(fig2)
 
