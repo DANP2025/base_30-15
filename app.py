@@ -8,6 +8,19 @@ import matplotlib.pyplot as plt
 # -------------------------------
 st.set_page_config(page_title="Análisis de Fuerza", layout="wide")
 
+# 🔒 OCULTAR MENÚ Y ELEMENTOS DE STREAMLIT
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stActionButton"] {display: none;}
+    [data-testid="stToolbar"] {display: none;}
+    [data-testid="stAppViewContainer"] > div:first-child {padding-top: 0rem;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # -------------------------------
 # CARGA DE DATOS
 # -------------------------------
@@ -24,9 +37,33 @@ def cargar_datos():
 df = cargar_datos()
 
 # -------------------------------
-# MOSTRAR IMAGEN ENCABEZADO
+# MOSTRAR IMAGEN COMO REFERENCIA DE CLASIFICACIÓN
 # -------------------------------
-st.image(imagen_header, use_container_width=True, caption="Clasificación de Fuerza", output_format="PNG")
+st.markdown("""
+<style>
+.banner-container {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+.banner-container img {
+    width: 85%;
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+.banner-caption {
+    text-align: center;
+    color: #666;
+    font-size: 14px;
+    margin-top: 0.3rem;
+    font-style: italic;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="banner-container">', unsafe_allow_html=True)
+st.image(imagen_header, use_container_width=False)
+st.markdown('<div class="banner-caption">Referencia de clasificación de fuerza</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------------------
 # FILTROS DINÁMICOS
@@ -57,7 +94,6 @@ df_filtrado = df_filtrado[
 # -------------------------------
 # CÁLCULOS ZSCORE Y TSCORE
 # -------------------------------
-# El cálculo usa todos los jugadores del mes (no solo los filtrados)
 if mes_sel == "Todos":
     df_base = df.copy()
 else:
@@ -70,7 +106,7 @@ df_filtrado["ZScore"] = (df_filtrado["RM SENTADILLA"] - mean_val) / std_val
 df_filtrado["TScore"] = (df_filtrado["ZScore"] * 10) + 50
 
 # -------------------------------
-# GRÁFICOS CON ESTILO “VENDE HUMO”
+# GRÁFICOS PROFESIONALES
 # -------------------------------
 st.markdown("## 💪 Análisis de Fuerza por Jugador")
 
@@ -82,7 +118,7 @@ with col1:
     colores = plt.cm.viridis(np.linspace(0.2, 0.9, len(df_filtrado)))
 
     bars = ax.bar(df_filtrado["JUGADOR"], df_filtrado["ZScore"],
-                  color=colores, alpha=0.9, edgecolor="black", linewidth=1)
+                  color=colores, alpha=0.9, edgecolor="black", linewidth=1.2)
 
     # Etiquetas sobre cada barra
     for bar in bars:
@@ -93,11 +129,9 @@ with col1:
     ax.set_title("📊 Z-SCORE por Jugador", fontsize=15, fontweight='bold')
     ax.set_xlabel("")
     ax.set_ylabel("ZScore", fontsize=12)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.set_axisbelow(True)
+    # Eliminar líneas y bordes
+    for spine in ax.spines.values():
+        spine.set_visible(False)
     ax.yaxis.grid(False)
     ax.xaxis.grid(False)
     plt.xticks(rotation=45, ha="right", fontsize=10)
@@ -109,7 +143,7 @@ with col2:
     colores2 = plt.cm.coolwarm(np.linspace(0.2, 0.9, len(df_filtrado)))
 
     bars2 = ax2.bar(df_filtrado["JUGADOR"], df_filtrado["TScore"],
-                    color=colores2, alpha=0.9, edgecolor="black", linewidth=1)
+                    color=colores2, alpha=0.9, edgecolor="black", linewidth=1.2)
 
     for bar in bars2:
         height = bar.get_height()
@@ -119,10 +153,8 @@ with col2:
     ax2.set_title("🔥 T-SCORE por Jugador", fontsize=15, fontweight='bold')
     ax2.set_xlabel("")
     ax2.set_ylabel("TScore", fontsize=12)
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    ax2.spines['left'].set_visible(False)
-    ax2.spines['bottom'].set_visible(False)
+    for spine in ax2.spines.values():
+        spine.set_visible(False)
     ax2.yaxis.grid(False)
     ax2.xaxis.grid(False)
     plt.xticks(rotation=45, ha="right", fontsize=10)
@@ -137,3 +169,4 @@ Datos actualizados automáticamente desde Excel.<br>
 Los cálculos se basan en la media y desviación estándar del mes seleccionado.
 </div>
 """, unsafe_allow_html=True)
+
