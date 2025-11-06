@@ -1,4 +1,4 @@
-# app.py — Versión estable con imagen clasificacion.png
+# app.py — Versión mejorada con imagen reducida y opción "Todos" en filtros
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -14,28 +14,22 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # -------------------------
 st.set_page_config(page_title="Análisis de Fuerza - Z & T scores", layout="wide")
 
-# Ocultar menú / iconos superiores (para link público)
-st.markdown(
-    """
+# Ocultar menú / iconos superiores
+st.markdown("""
     <style>
       #MainMenu {visibility: hidden;}
       header {visibility: hidden;}
       footer {visibility: hidden;}
       [data-testid="stToolbar"] {display: none !important;}
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+    """, unsafe_allow_html=True)
 
 # -------------------------
-# Config - nombre del Excel y hoja
+# Configuración del archivo Excel
 # -------------------------
 EXCEL_NAME = "BASE DE DATOS TODAS LAS VARIABLES DEMO.xlsx"
 SHEET_NAME = "FUERZA"
 
-# -------------------------
-# Cargar Excel (sin cache para que se actualice al recargar)
-# -------------------------
 def load_excel(path=EXCEL_NAME, sheet=SHEET_NAME):
     if not os.path.exists(path):
         st.error(f"❌ No se encontró el archivo '{path}' en la carpeta del proyecto.")
@@ -44,13 +38,13 @@ def load_excel(path=EXCEL_NAME, sheet=SHEET_NAME):
     if sheet in xls.sheet_names:
         df = pd.read_excel(path, sheet_name=sheet)
     else:
-        df = pd.read_excel(path)  # primera hoja
+        df = pd.read_excel(path)
     return df
 
 df_raw = load_excel()
 
 # -------------------------
-# Normalizar nombres de columnas
+# Normalización de nombres de columnas
 # -------------------------
 col_map = {col.strip().upper(): col for col in df_raw.columns}
 
@@ -81,7 +75,6 @@ if col_categoria:
     rename_map[col_categoria] = "CATEGORIA"
 df = df_raw.rename(columns=rename_map)
 
-# Limpieza y conversión de tipos
 df["MES"] = df["MES"].astype(str).str.strip()
 df["JUGADOR"] = df["JUGADOR"].astype(str).str.strip()
 df["RM_SENTADILLA"] = pd.to_numeric(df["RM_SENTADILLA"], errors="coerce")
@@ -89,27 +82,43 @@ if "CATEGORIA" in df.columns:
     df["CATEGORIA"] = df["CATEGORIA"].astype(str).str.strip()
 
 # -------------------------
-# Filtros laterales
+# Filtros con opción "Todos"
 # -------------------------
 st.sidebar.header("Filtros")
 
+# MES
 meses = sorted(df["MES"].dropna().unique().tolist())
-jugadores = sorted(df["JUGADOR"].dropna().unique().tolist())
-categorias = sorted(df["CATEGORIA"].dropna().unique().tolist()) if "CATEGORIA" in df.columns else []
+meses = ["Todos"] + meses
+mes_sel = st.sidebar.multiselect("Seleccionar MES", options=meses, default=["Todos"])
 
-mes_sel = st.sidebar.multiselect("Seleccionar MES", options=meses, default=meses)
-jug_sel = st.sidebar.multiselect("Seleccionar JUGADOR(es)", options=jugadores, default=jugadores)
-if categorias:
-    cat_sel = st.sidebar.multiselect("Seleccionar CATEGORÍA(s)", options=categorias, default=categorias)
+# JUGADOR
+jugadores = sorted(df["JUGADOR"].dropna().unique().tolist())
+jugadores = ["Todos"] + jugadores
+jug_sel = st.sidebar.multiselect("Seleccionar JUGADOR(es)", options=jugadores, default=["Todos"])
+
+# CATEGORIA (si existe)
+if "CATEGORIA" in df.columns:
+    categorias = sorted(df["CATEGORIA"].dropna().unique().tolist())
+    categorias = ["Todos"] + categorias
+    cat_sel = st.sidebar.multiselect("Seleccionar CATEGORÍA(s)", options=categorias, default=["Todos"])
 else:
     cat_sel = None
 
-if len(mes_sel) == 0:
-    st.warning("Seleccioná al menos un MES.")
+# Aplicación de filtros
+df_filtered = df.copy()
+if "Todos" not in mes_sel:
+    df_filtered = df_filtered[df_filtered["MES"].isin(mes_sel)]
+if "Todos" not in jug_sel:
+    df_filtered = df_filtered[df_filtered["JUGADOR"].isin(jug_sel)]
+if cat_sel is not None and "Todos" not in cat_sel:
+    df_filtered = df_filtered[df_filtered["CATEGORIA"].isin(cat_sel)]
+
+if df_filtered.empty:
+    st.warning("No hay datos que coincidan con los filtros seleccionados.")
     st.stop()
 
 # -------------------------
-# Cálculo Z y T score por MES (base = todos los jugadores del mes)
+# Cálculo de Z y T score
 # -------------------------
 def safe_z(series):
     vals = pd.to_numeric(series, errors="coerce")
@@ -124,15 +133,6 @@ def safe_z(series):
 df["Zscore"] = df.groupby("MES")["RM_SENTADILLA"].transform(lambda s: safe_z(s))
 df["Tscore"] = df["Zscore"] * 10 + 50
 
-# Aplicar filtros de visualización (sin alterar base estadística)
-df_view = df[df["MES"].isin(mes_sel) & df["JUGADOR"].isin(jug_sel)]
-if cat_sel is not None:
-    df_view = df_view[df_view["CATEGORIA"].isin(cat_sel)]
-
-if df_view.empty:
-    st.warning("No hay datos que coincidan con los filtros seleccionados.")
-    st.stop()
-
 # -------------------------
 # Cabecera
 # -------------------------
@@ -141,12 +141,14 @@ st.markdown("<p style='text-align:center; color:#555;'>Comparación visual y est
 st.markdown("---")
 
 # -------------------------
-# Mostrar imagen como referencia visual centrada
+# Imagen centrada y reducida
 # -------------------------
 image_path = "clasificacion.png"
 if os.path.exists(image_path):
     img = Image.open(image_path)
-    st.image(img, caption="Referencia de Clasificación", use_container_width=True)
+    st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+    st.image(img, caption="Referencia de Clasificación", width=550)  # 👈 tamaño reducido
+    st.markdown("</div>", unsafe_allow_html=True)
 else:
     st.warning("⚠️ No se encontró el archivo 'clasificacion.png' en la carpeta del proyecto.")
 
@@ -155,7 +157,7 @@ st.markdown("---")
 # -------------------------
 # Datos para gráficos
 # -------------------------
-df_plot = df_view.groupby("JUGADOR").agg({
+df_plot = df_filtered.groupby("JUGADOR").agg({
     "RM_SENTADILLA": "mean",
     "Zscore": "mean",
     "Tscore": "mean"
@@ -176,7 +178,6 @@ with col1:
     cmap = plt.cm.get_cmap("viridis", len(players))
     bars = ax.bar(players, zvals, color=[cmap(i) for i in range(len(players))], edgecolor="black", linewidth=0.7)
     ax.set_ylabel("Z-score", fontsize=11)
-    ax.set_xlabel("")
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
     for bar in bars:
         h = bar.get_height()
@@ -184,7 +185,6 @@ with col1:
         ax.text(bar.get_x() + bar.get_width()/2, ypos, f"{h:.2f}", ha="center", va="bottom" if h>=0 else "top", fontsize=9, fontweight="bold")
     for spine in ax.spines.values():
         spine.set_visible(False)
-    ax.grid(False)
     st.pyplot(fig, use_container_width=True)
 
 with col2:
@@ -193,7 +193,6 @@ with col2:
     cmap2 = plt.cm.get_cmap("coolwarm", len(players))
     bars2 = ax2.bar(players, tvals, color=[cmap2(i) for i in range(len(players))], edgecolor="black", linewidth=0.7)
     ax2.set_ylabel("T-score", fontsize=11)
-    ax2.set_xlabel("")
     plt.setp(ax2.get_xticklabels(), rotation=45, ha="right", fontsize=9)
     for bar in bars2:
         h = bar.get_height()
@@ -201,14 +200,13 @@ with col2:
         ax2.text(bar.get_x() + bar.get_width()/2, ypos, f"{h:.1f}", ha="center", va="bottom", fontsize=9, fontweight="bold")
     for spine in ax2.spines.values():
         spine.set_visible(False)
-    ax2.grid(False)
     st.pyplot(fig2, use_container_width=True)
 
 # -------------------------
-# Tabla resumen
+# Tabla final
 # -------------------------
 st.markdown("---")
 st.subheader("📋 Tabla de datos filtrados")
 cols_show = ["JUGADOR", "MES", "RM_SENTADILLA", "Zscore", "Tscore"]
-available = [c for c in cols_show if c in df_view.columns]
-st.dataframe(df_view[available].round(3).sort_values(["MES", "JUGADOR"]), use_container_width=True)
+available = [c for c in cols_show if c in df_filtered.columns]
+st.dataframe(df_filtered[available].round(3).sort_values(["MES", "JUGADOR"]), use_container_width=True)
