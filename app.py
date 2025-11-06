@@ -1,4 +1,4 @@
-# app.py — Versión estable (SIN imagen)
+# app.py — Versión estable con imagen clasificacion.png
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import os
 import warnings
+from PIL import Image
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # -------------------------
@@ -49,7 +50,7 @@ def load_excel(path=EXCEL_NAME, sheet=SHEET_NAME):
 df_raw = load_excel()
 
 # -------------------------
-# Normalizar nombres de columnas y buscar variantes
+# Normalizar nombres de columnas
 # -------------------------
 col_map = {col.strip().upper(): col for col in df_raw.columns}
 
@@ -75,13 +76,12 @@ if missing:
     st.write(list(df_raw.columns))
     st.stop()
 
-# Renombrar columnas a nombres estándar para el script
 rename_map = {col_mes: "MES", col_jugador: "JUGADOR", col_rm: "RM_SENTADILLA"}
 if col_categoria:
     rename_map[col_categoria] = "CATEGORIA"
 df = df_raw.rename(columns=rename_map)
 
-# Limpiar y convertir tipos
+# Limpieza y conversión de tipos
 df["MES"] = df["MES"].astype(str).str.strip()
 df["JUGADOR"] = df["JUGADOR"].astype(str).str.strip()
 df["RM_SENTADILLA"] = pd.to_numeric(df["RM_SENTADILLA"], errors="coerce")
@@ -89,7 +89,7 @@ if "CATEGORIA" in df.columns:
     df["CATEGORIA"] = df["CATEGORIA"].astype(str).str.strip()
 
 # -------------------------
-# UI: filtros (multiselect con Todos por defecto)
+# Filtros laterales
 # -------------------------
 st.sidebar.header("Filtros")
 
@@ -97,25 +97,20 @@ meses = sorted(df["MES"].dropna().unique().tolist())
 jugadores = sorted(df["JUGADOR"].dropna().unique().tolist())
 categorias = sorted(df["CATEGORIA"].dropna().unique().tolist()) if "CATEGORIA" in df.columns else []
 
-# multiselect default = all
 mes_sel = st.sidebar.multiselect("Seleccionar MES", options=meses, default=meses)
-jug_sel = st.sidebar.multiselect("Seleccionar JUGADOR(s)", options=jugadores, default=jugadores)
+jug_sel = st.sidebar.multiselect("Seleccionar JUGADOR(es)", options=jugadores, default=jugadores)
 if categorias:
     cat_sel = st.sidebar.multiselect("Seleccionar CATEGORÍA(s)", options=categorias, default=categorias)
 else:
     cat_sel = None
 
-# -------------------------
-# Validar que haya datos después de filtros de mes (para cálculo base)
-# -------------------------
 if len(mes_sel) == 0:
     st.warning("Seleccioná al menos un MES.")
     st.stop()
 
 # -------------------------
-# Cálculo Z/T per MES (base = todos los jugadores del mes)
+# Cálculo Z y T score por MES (base = todos los jugadores del mes)
 # -------------------------
-# Safe zscore function (uses population std ddof=0)
 def safe_z(series):
     vals = pd.to_numeric(series, errors="coerce")
     if vals.dropna().empty:
@@ -126,13 +121,10 @@ def safe_z(series):
         return pd.Series([0.0]*len(series), index=series.index)
     return (vals - mean) / std
 
-# compute per MES across full df (not filtered)
 df["Zscore"] = df.groupby("MES")["RM_SENTADILLA"].transform(lambda s: safe_z(s))
 df["Tscore"] = df["Zscore"] * 10 + 50
 
-# -------------------------
-# Apply view filters (which should not change the computed Z/T bases)
-# -------------------------
+# Aplicar filtros de visualización (sin alterar base estadística)
 df_view = df[df["MES"].isin(mes_sel) & df["JUGADOR"].isin(jug_sel)]
 if cat_sel is not None:
     df_view = df_view[df_view["CATEGORIA"].isin(cat_sel)]
@@ -142,14 +134,26 @@ if df_view.empty:
     st.stop()
 
 # -------------------------
-# Header and layout (NO image)
+# Cabecera
 # -------------------------
 st.markdown("<h2 style='text-align:center; color:#1F618D;'>💪 Análisis de Fuerza — RM Sentadilla</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center; color:#555;'>(Versión estable — sin imagen) — recarga la página para ver cambios en el Excel</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; color:#555;'>Comparación visual y estadística (Z-score & T-score)</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 # -------------------------
-# Prepare plotting data (group by JUGADOR, average if multiple rows)
+# Mostrar imagen como referencia visual centrada
+# -------------------------
+image_path = "clasificacion.png"
+if os.path.exists(image_path):
+    img = Image.open(image_path)
+    st.image(img, caption="Referencia de Clasificación", use_container_width=True)
+else:
+    st.warning("⚠️ No se encontró el archivo 'clasificacion.png' en la carpeta del proyecto.")
+
+st.markdown("---")
+
+# -------------------------
+# Datos para gráficos
 # -------------------------
 df_plot = df_view.groupby("JUGADOR").agg({
     "RM_SENTADILLA": "mean",
@@ -162,21 +166,20 @@ zvals = df_plot["Zscore"].fillna(0).tolist()
 tvals = df_plot["Tscore"].fillna(50).tolist()
 
 # -------------------------
-# Plot side-by-side
+# Gráficos lado a lado
 # -------------------------
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Z-score por Jugador")
     fig, ax = plt.subplots(figsize=(8, 5))
-    cmap = plt.cm.get_cmap("viridis", len(players) if len(players)>0 else 1)
+    cmap = plt.cm.get_cmap("viridis", len(players))
     bars = ax.bar(players, zvals, color=[cmap(i) for i in range(len(players))], edgecolor="black", linewidth=0.7)
-    ax.set_ylabel("Z-score")
+    ax.set_ylabel("Z-score", fontsize=11)
     ax.set_xlabel("")
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
     for bar in bars:
         h = bar.get_height()
-        # label above/below depending sign
         ypos = h + 0.02 if h >= 0 else h - 0.02
         ax.text(bar.get_x() + bar.get_width()/2, ypos, f"{h:.2f}", ha="center", va="bottom" if h>=0 else "top", fontsize=9, fontweight="bold")
     for spine in ax.spines.values():
@@ -187,11 +190,11 @@ with col1:
 with col2:
     st.subheader("T-score por Jugador")
     fig2, ax2 = plt.subplots(figsize=(8, 5))
-    cmap2 = plt.cm.get_cmap("coolwarm", len(players) if len(players)>0 else 1)
+    cmap2 = plt.cm.get_cmap("coolwarm", len(players))
     bars2 = ax2.bar(players, tvals, color=[cmap2(i) for i in range(len(players))], edgecolor="black", linewidth=0.7)
-    ax2.set_ylabel("T-score")
+    ax2.set_ylabel("T-score", fontsize=11)
     ax2.set_xlabel("")
-    plt.setp(ax2.get_xticklabels(), rotation=45, ha="right")
+    plt.setp(ax2.get_xticklabels(), rotation=45, ha="right", fontsize=9)
     for bar in bars2:
         h = bar.get_height()
         ypos = h + 0.3
@@ -202,10 +205,10 @@ with col2:
     st.pyplot(fig2, use_container_width=True)
 
 # -------------------------
-# Table summary
+# Tabla resumen
 # -------------------------
 st.markdown("---")
-st.subheader("Tabla (filtrada)")
+st.subheader("📋 Tabla de datos filtrados")
 cols_show = ["JUGADOR", "MES", "RM_SENTADILLA", "Zscore", "Tscore"]
 available = [c for c in cols_show if c in df_view.columns]
 st.dataframe(df_view[available].round(3).sort_values(["MES", "JUGADOR"]), use_container_width=True)
